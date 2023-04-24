@@ -1,17 +1,43 @@
-# Первое практическое занятие по администрированию Linux
+# Занятие 5 - Основы баз данных
+## Задание для практического занятия
+1) Загрузить базу реестра https://github.com/zapret-info/z-i/blob/master/dump.csv разобраться в структуре
+2) Установить на сервер postgres 
+3) Запустить postgres в докере
+4) Перенести информацию из дампа в базу в pg 
+5) Сделать утилиту на python, которая выбирает из базы информацию по ip или домену
+6) Сделать подсчет статистики по базе (количество решение/ip/доменов)
+7) Сделать бэкап базы и перенести её из докера на сервер
+8) Сделать копию скрипта, который ходит на сервер вместо докера
 
-- ***install_packages.sh*** - монтирование iso и установка пакетов
-- ***add-users.sh*** - добавление пользователей
-- ***add-lv.sh*** - создание логического диск для точки монтирования `/var` (size 30GB)
-- ***swap.sh*** - создание и включение файла подкачки при помощи swapon (size 4GB)
-- ***iptables.sh*** - реализация фильтрации при помощи iptables: 
-        
-        - Входящий трафик протокола ICMP должен быть отклонен, с уведомлением о том, что порт недоступен
+## Последовательность действий для решения задания
 
-        - Входящий трафик до сервера должен быть разрешен только из подсетей 192.168.0.0/16
+### необходимые зависимости:
+`pip install psycopg2-binary`
 
-Для подключения версия openvpn <2.4 `sudo openvpn --config labclient11.ovpn` 
+`pip install pandas`
 
-Для первоначальной настройки необходимо поднять контейнер `sudo docker run -d -it -p 8080:8080 -v ~/vk_sre/lesson1/volume:/root/images solarkennedy/ipmi-kvm-docker`
+- для скачивания датасета вводим `wget https://raw.githubusercontent.com/zapret-info/z-i/master/dump.csv`
+- преобразуем **dump.csv** в **dump_output.csv** для иморта в pg запуском питоновского скрипта, который использует библиотеку pandas `sudo python3 encoding.py`
+- поднимаем docker-compose file `sudo docker-compose --project-name="test-pg" up -d`
+- заходим в pg в докере `psql -h 127.0.0.1 -U admini -d test-db`
+- добавляем туда таблицу **dump**
+```
+CREATE TABLE dump 
+(                       
+    ip text,
+    domain text,
+    url text,
+    organization text,
+    number text,
+    date date
+);
+```
+- добавляем данные из cvs файла
+`COPY dump FROM '/var/lib/postgresql/data/pgdata/dump_output.csv' WITH(FORMAT CSV, NULL '', DELIMITER ';', HEADER TRUE);`
 
-Подключиться к машинке можно через `sudo ssh admini@192.168.2.78` или `ssh -i ~/.ssh/id_rsa d.alexeev@192.168.2.78`
+- запускаем скрипт для работы с бд и проверки функционала `python3 pgscript.py`
+
+### DUMP
+Дамп можно сделать командой `pg_dump -U admini -h 127.0.0.1 test-db > backup_docker.dump`
+
+Импортировать дамп можно только в существующую дб командой `psql -U admini -h 127.0.0.1 test-db < backup_docker.dump`
