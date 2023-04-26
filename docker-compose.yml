@@ -3,7 +3,7 @@ services:
   postgres:
     image: postgres:12
     environment:
-      POSTGRES_DB: "test-db"
+      POSTGRES_DB: "testdb"
       POSTGRES_USER: "admini"
       POSTGRES_PASSWORD: "toortoor"
       PGDATA: "/var/lib/postgresql/data/pgdata"

@@ -1,4 +1,7 @@
 # Занятие 5 - Основы баз данных
+## Что можно добавить:
+1) Подключение через ssh тунель используя библиотеку **paramiko**
+2) еще посмотреть https://pyneng.readthedocs.io/ru/latest/book/18_ssh_telnet/scrapli.html
 ## Задание для практического занятия
 1) Загрузить базу реестра https://github.com/zapret-info/z-i/blob/master/dump.csv разобраться в структуре
 2) Установить на сервер postgres 
@@ -18,7 +21,7 @@
 - **encoding.py** - приводит в датасет в кайф вид. на входе читается dump.csv. Pandas приводит его к норм виду. На выходе dump_output.csv
 - **pgscript.py** - скрипт для подключения к pg. На выбор несколько опций. Первый выбор - свой sql запрос или работа с определенным столбцом. При выборе первого варианта вводится sql выражение. При выборе второго варианта выбирается номер столбца. Следующий выбор - получение статистики по столбцу или ввод своего значения для просмотра на наличие в данном столбце.
 - **docker-compose.yml** - поднимает контейнер с указанными в нем параметрами 
-- script.sh - bash скрипт, который выполняет все описанные в следующем пункте последовательности
+- **script.sh** - bash скрипт, который выполняет все описанные в следующем пункте последовательности
 
 ## Последовательность действий для решения задания
 
@@ -47,3 +50,22 @@ CREATE TABLE dump
 Дамп можно сделать командой `pg_dump -U admini -h 127.0.0.1 test-db > backup_docker.dump`
 
 Импортировать дамп можно только в существующую дб командой `psql -U admini -h 127.0.0.1 test-db < backup_docker.dump`
+
+### Перед тем как делать дамп, на сервере:
+1) Заходим в psql `sudo -u postgres psql` или в root postgres `sudo su - postgres`  
+2) Создаем пользователя admini `create user admini with password 'toortoor'`
+3) Создаем database **testdb** `create database testdb;`
+4) Выдаем привелегии пользователю **admini** на database `GRANT ALL PRIVILEGES ON DATABASE testdb TO admini;`
+5) После чего тестим `psql -h 127.0.0.1 -U admini testdb`
+
+### Чтобы скрипт ходил на сервер, нужно настроить postgres на принятие пакетов с 0.0.0.0
+1) `sudo nano /etc/postgresql/12/main/postgresql.conf`
+Отредактируйте этот файл, измените параметр listen_addresses на значение '*' изменив строку: 
+
+- `listen_addresses = '*'          # what IP address(es) to listen on;`
+
+2) в файл pg_hba.conf добавьте правило, которое разрешает удаленное подключение к базе данных `sudo nano /etc/postgresql/12/main/pg_hba.conf` 
+ и добавляем строку
+- `host    all             all             0.0.0.0/0               md5`
+
+3) `sudo systemctl restart postgresql.service`

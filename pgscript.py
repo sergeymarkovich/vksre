@@ -4,9 +4,9 @@ import sys
 # Установление соединения с базой данных
 try:
     conn = psycopg2.connect(
-        host="localhost",
+        host="localhost", # заменить на адрес сервера
         port="5432",
-        database="test-db",
+        database="testdb",
         user="admini",
         password="toortoor"
     )
