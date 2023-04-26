@@ -69,3 +69,4 @@ CREATE TABLE dump
 - `host    all             all             0.0.0.0/0               md5`
 
 3) `sudo systemctl restart postgresql.service`
+4) Протестить какие порты слушает postgres можно командой `sudo netstat -plnt | grep 5432`
