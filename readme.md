@@ -1,72 +1,126 @@
-# Занятие 5 - Основы баз данных
-## Что можно добавить:
-1) Подключение через ssh тунель используя библиотеку **paramiko**
-2) еще посмотреть https://pyneng.readthedocs.io/ru/latest/book/18_ssh_telnet/scrapli.html
-## Задание для практического занятия
-1) Загрузить базу реестра https://github.com/zapret-info/z-i/blob/master/dump.csv разобраться в структуре
-2) Установить на сервер postgres 
-3) Запустить postgres в докере
-4) Перенести информацию из дампа в базу в pg 
-5) Сделать утилиту на python, которая выбирает из базы информацию по ip или домену
-6) Сделать подсчет статистики по базе (количество решение/ip/доменов)
-7) Сделать бэкап базы и перенести её из докера на сервер
-8) Сделать копию скрипта, который ходит на сервер вместо докера
+# Занятие 6 - Мониторинг сервиса
+## Задание:
+1) Установить Prometheus https://prometheus.io/download/
 
-## необходимые зависимости:
-`pip install psycopg2-binary`
+2) Установить и настроить node_exporter https://github.com/prometheus/node_exporter
 
-`pip install pandas`
+3) Установить Grafana https://grafana.com/oss/grafana/
 
-## про файлы в репе
-- **encoding.py** - приводит в датасет в кайф вид. на входе читается dump.csv. Pandas приводит его к норм виду. На выходе dump_output.csv
-- **pgscript.py** - скрипт для подключения к pg. На выбор несколько опций. Первый выбор - свой sql запрос или работа с определенным столбцом. При выборе первого варианта вводится sql выражение. При выборе второго варианта выбирается номер столбца. Следующий выбор - получение статистики по столбцу или ввод своего значения для просмотра на наличие в данном столбце.
-- **docker-compose.yml** - поднимает контейнер с указанными в нем параметрами 
-- **script.sh** - bash скрипт, который выполняет все описанные в следующем пункте последовательности
+4) Добавить в Grafana Prometheus как источник данных
 
-## Последовательность действий для решения задания
+5) Настроить стандартный дашборд состояния системы https://grafana.com/grafana/dashboards/1860-node-exporter-full/
 
-- для скачивания датасета вводим `wget https://raw.githubusercontent.com/zapret-info/z-i/master/dump.csv`
-- преобразуем **dump.csv** в **dump_output.csv** для иморта в pg запуском питоновского скрипта, который использует библиотеку pandas `sudo python3 encoding.py`
-- поднимаем docker-compose file `sudo docker-compose --project-name="test-pg" up -d`
-- заходим в pg в докере `psql -h 127.0.0.1 -U admini -d test-db`
-- добавляем туда таблицу **dump**
+## Решение 
+https://www.dmosk.ru/miniinstruktions.php?mini=prometheus-stack-docker
+
+1) Создаем каталоги, где будем создавать наши файлы:
+`mkdir -p /opt/prometheus_stack/{prometheus,grafana,alertmanager,blackbox}`
+2) Создаем файл `touch /opt/prometheus_stack/docker-compose.yml`
+3) И переходим в каталог `cd /opt/prometheus_stack`
+4) Настраиваем Prometheus + Node Exporter
+- `sudo nano docker-compose.yml`
 ```
-CREATE TABLE dump 
-(                       
-    ip text,
-    domain text,
-    url text,
-    organization text,
-    number text,
-    date date
-);
+version: '3.7'
+
+services:
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus:/etc/prometheus/
+    container_name: prometheus
+    hostname: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Moscow"
+    networks:
+      - default
+
+  node-exporter:
+    image: prom/node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    container_name: exporter
+    hostname: exporter
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.ignored-mount-points
+      - ^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)
+    ports:
+      - 9100:9100
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Moscow"
+    networks:
+      - default
+
+networks:
+  default:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
 ```
-- добавляем данные из cvs файла
-`COPY dump FROM '/var/lib/postgresql/data/pgdata/dump_output.csv' WITH(FORMAT CSV, NULL '', DELIMITER ';', HEADER TRUE);`
 
-- запускаем скрипт для работы с бд и проверки функционала `python3 pgscript.py`
+В данном примере мы создаем 2 сервиса — prometheus и node-exporter. Также мы отдельно определили подсеть 172.28.0.0/16, в которой будут находиться наши контейнеры docker.
 
-### DUMP
-Дамп можно сделать командой `pg_dump -U admini -h 127.0.0.1 test-db > backup_docker.dump`
+5) Создаем конфигурационный файл для prometheus:
+`sudo nano nano prometheus/prometheus.yml`
+```
+scrape_configs:
+  - job_name: node
+    scrape_interval: 5s
+    static_configs:
+    - targets: ['node-exporter:9100']
+```
+В данном примере мы прописываем наш node-exporter в качестве таргета.
 
-Импортировать дамп можно только в существующую дб командой `psql -U admini -h 127.0.0.1 test-db < backup_docker.dump`
+6) Запускаем контейнеры: `sudo docker-compose up -d`
 
-### Перед тем как делать дамп, на сервере:
-1) Заходим в psql `sudo -u postgres psql` или в root postgres `sudo su - postgres`  
-2) Создаем пользователя admini `create user admini with password 'toortoor'`
-3) Создаем database **testdb** `create database testdb;`
-4) Выдаем привелегии пользователю **admini** на database `GRANT ALL PRIVILEGES ON DATABASE testdb TO admini;`
-5) После чего тестим `psql -h 127.0.0.1 -U admini testdb`
+7) Открываем браузер и переходим по адресу http://<IP-адрес сервера>:9090 — мы должны увидеть страницу Prometheus. Переходим по адресу http://<IP-адрес сервера>:9100 — мы должны увидеть страницу Node Exporter:
 
-### Чтобы скрипт ходил на сервер, нужно настроить postgres на принятие пакетов с 0.0.0.0
-1) `sudo nano /etc/postgresql/12/main/postgresql.conf`
-Отредактируйте этот файл, измените параметр listen_addresses на значение '*' изменив строку: 
+8) Добавим к нашему стеку графану.
+`sudo nano docker-compose.yml`
+```
+version: '3.7'
 
-- `listen_addresses = '*'          # what IP address(es) to listen on;`
+services:
+  ...
+  grafana:
+    image: grafana/grafana
+    user: root
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    volumes:
+      - ./grafana:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    container_name: grafana
+    hostname: grafana
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Moscow"
+    networks:
+      - default
 
-2) в файл pg_hba.conf добавьте правило, которое разрешает удаленное подключение к базе данных `sudo nano /etc/postgresql/12/main/pg_hba.conf` 
- и добавляем строку
-- `host    all             all             0.0.0.0/0               md5`
+...
+```
 
-3) `sudo systemctl restart postgresql.service`
-4) Протестить какие порты слушает postgres можно командой `sudo netstat -plnt | grep 5432`
+9) Перезапустим контейнеры:
+`sudo docker-compose up -d`
+
+10) Открываем браузер и переходим по адресу http://<IP-адрес сервера>:3000 — мы должны увидеть стартовую страницу Grafana. Для авторизации вводим admin / admin. После система потребует ввести новый пароль.
+
+11) Настроим связку с Prometheus. Кликаем по иконке Configuration - Data Sources. Переходим к добавлению источника, нажав по Add data source. Среди списка источников данных находим и выбираем Prometheus, кликнув по Select. Задаем параметры для подключения к Prometheus: `http://prometheus:9090`.
+Сохраняем настройки, кликнув по Save & Test:
+
+
+12) Добавим дашборд для мониторинга с node exporter. Для этого уже есть готовый вариант. Кликаем по изображению плюса и выбираем Import. Вводим идентификатор дашборда. Для Node Exporter это **1860**. Кликаем Load — Grafana подгрузит дашборд из своего репозитория — выбираем в разделе Prometheus наш источник данных и кликаем по Import
